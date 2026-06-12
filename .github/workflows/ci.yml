@@ -13,106 +13,100 @@ permissions:
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/nginx-cicd-tp
 
+# ─────────────────────────────────────────────
 jobs:
 
-  # ─── JOB 1 : Build & Test ────────────────────────────────────
+# ─── 1. BUILD + TEST ─────────────────────────
   build-test:
     name: Build & Test
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout du code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Vérifier la présence des fichiers essentiels
+      - name: Check required files
         run: |
-          echo "Vérification des fichiers..."
-          test -f Dockerfile   && echo "✅ Dockerfile trouvé"   || (echo "❌ Dockerfile manquant" && exit 1)
-          test -f nginx.conf   && echo "✅ nginx.conf trouvé"   || (echo "❌ nginx.conf manquant" && exit 1)
-          test -f index.html   && echo "✅ index.html trouvé"   || (echo "❌ index.html manquant" && exit 1)
+          test -f Dockerfile && echo "✅ Dockerfile"
+          test -f nginx.conf && echo "✅ nginx.conf"
+          test -f index.html && echo "✅ index.html"
 
-      - name: Build de l'image Docker
-        run: docker build -t nginx-ci-demo:${{ github.sha }} .
+      - name: Build image (test)
+        run: docker build -t nginx-ci:${{ github.sha }} .
 
-      - name: Tester la configuration Nginx
-        run: docker run --rm nginx-ci-demo:${{ github.sha }} nginx -t
+      - name: Test nginx config
+        run: docker run --rm nginx-ci:${{ github.sha }} nginx -t
 
-      - name: Lancer le conteneur
+      - name: Run container
         run: |
-          docker run -d --name nginx-test -p 8080:80 nginx-ci-demo:${{ github.sha }}
+          docker run -d --name nginx-test -p 8080:80 nginx-ci:${{ github.sha }}
           sleep 3
 
-      - name: Tester la réponse HTTP sur /
+      - name: HTTP test /
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/)
-          echo "Status HTTP: $STATUS"
-          [ "$STATUS" = "200" ] || (echo "❌ Le serveur ne répond pas en HTTP" && exit 1)
-          echo "✅ Le serveur répond bien en HTTP 200"
+          echo "HTTP: $STATUS"
+          [ "$STATUS" = "200" ]
 
-      - name: Tester l'endpoint /health
+      - name: Test /health
         run: |
-          HEALTH=$(curl -s http://localhost:8080/health)
-          echo "Réponse /health: $HEALTH"
-          [ "$HEALTH" = "OK" ] || (echo "❌ /health ne répond pas correctement" && exit 1)
-          echo "✅ /health répond : OK"
+          RESPONSE=$(curl -s http://localhost:8080/health)
+          echo "$RESPONSE"
+          [ "$RESPONSE" = "OK" ]
 
-      - name: Vérifier qu'aucun secret n'est dans les logs
+      - name: Secret scan
         run: |
-          echo "Vérification : aucun secret en clair dans le code..."
-          ! grep -rE "(password|secret|token|api_key)\s*=\s*['\"][^'\"]{4,}" . \
-            --include="*.conf" --include="*.html" --include="*.yml" \
-            --exclude-dir=".git" \
-            --exclude-dir=".github" \
-          && echo "✅ Aucun secret détecté en clair" || (echo "❌ Secret potentiel détecté !" && exit 1)
+          ! grep -rE "(password|secret|token|api_key)" . \
+            --include="*.conf" \
+            --include="*.html" \
+            --include="*.yml" \
+            --exclude-dir=".git"
 
-      - name: Arrêter le conteneur
+      - name: Cleanup
         if: always()
         run: docker rm -f nginx-test || true
 
-  # ─── JOB 2 : Publish vers GitHub Container Registry ─────────
+
+# ─── 2. BUILD & PUSH GHCR ─────────────────────
   publish:
-    name: Publier l'image (Registry)
+    name: Publish to GHCR
     runs-on: ubuntu-latest
     needs: build-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
-    permissions:
-      contents: read
-      packages: write
-
     steps:
-      - name: Checkout du code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Connexion à GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build et push avec tag SHA
-        run: |
-          docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
-          docker tag  ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
-          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.IMAGE_NAME }}:latest
-          echo "✅ Image publiée : ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+      - name: Build and Push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
 
-  # ─── JOB 3 : Validation manuelle avant déploiement prod ─────
+
+# ─── 3. PRODUCTION DEPLOY (MANUAL APPROVAL) ───
   deploy-prod:
-    name: Déploiement Production
+    name: Deploy Production
     runs-on: ubuntu-latest
     needs: publish
     environment:
       name: production
-      url: https://github.com/${{ github.repository }}
 
     steps:
-      - name: Déploiement simulé en production
+      - name: Deploy (simulated)
         run: |
-          echo "🚀 Déploiement en production approuvé !"
-          echo "Image utilisée : ${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          echo "Commit SHA     : ${{ github.sha }}"
-          echo "Déployé par    : ${{ github.actor }}"
-          echo "✅ Production mise à jour avec succès."
+          echo "🚀 DEPLOY APPROVED"
+          echo "Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"
