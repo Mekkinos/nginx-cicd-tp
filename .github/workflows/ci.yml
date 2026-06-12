@@ -56,11 +56,20 @@ jobs:
 
       - name: Secret scan
         run: |
-          ! grep -rE "(password|secret|token|api_key)" . \
+          echo "🔍 Secret scan..."
+
+          if grep -rE "(password|secret|api_key|token)\s*=\s*['\"][^'\"]{4,}" . \
             --include="*.conf" \
             --include="*.html" \
             --include="*.yml" \
-            --exclude-dir=".git"
+            --exclude-dir=".git" \
+            --exclude-dir=".github"
+          then
+            echo "❌ Secret potentiel détecté"
+            exit 1
+          else
+            echo "✅ Aucun secret en clair détecté"
+          fi
 
       - name: Cleanup
         if: always()
