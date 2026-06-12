@@ -20,7 +20,7 @@ Le pipeline s’exécute automatiquement à chaque :
 
 ### 🔄 Étapes du pipeline :
 
-1. 📥 Récupération du code (Checkout)
+1. 📥 Récupération du code (Checkout) 
 2. 📁 Vérification des fichiers essentiels :
    - Dockerfile
    - nginx.conf
