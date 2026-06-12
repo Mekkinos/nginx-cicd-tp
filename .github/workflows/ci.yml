@@ -11,7 +11,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/nginx-cicd-tp
+  IMAGE_NAME: ghcr.io/mekkinos/nginx-cicd-tp
 
 # ─────────────────────────────────────────────
 jobs:
